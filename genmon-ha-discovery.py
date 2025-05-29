@@ -49,6 +49,7 @@ class GenmonHADiscovery:
         self.ha_sw_version = "Undefined"
         self.ha_origin = ha_origin
         self.ha_origin_version = "Undefined"
+        self.ha_origin_support_url = "https://github.com/jgyates/genmon"
 
         # MQTT client setup
         self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -213,7 +214,6 @@ class GenmonHADiscovery:
                 return
             elif "Generator_Monitor_Version" in formatted_name:
                 self.ha_sw_version = payload
-                return
             
             # Set up device info (same for all entities)
             device_info = {
@@ -227,7 +227,9 @@ class GenmonHADiscovery:
 
             #Set up origin info (same for all entities)
             origin_info = {
-                "name": self.ha_origin
+                "name": self.ha_origin,
+                "sw_version": self.ha_origin_version,
+                "support_url": self.ha_origin_support_url
             } 
             
             # Get value template and unit based on payload format
@@ -236,14 +238,14 @@ class GenmonHADiscovery:
             # Register entity if not already registered
             if unique_id not in self.registered_entities:
                 # Create a discovery config for this entity
-                self._register_ha_entity(entity_type, category, entity_name, unique_id, device_info, topic, value_template, unit)
+                self._register_ha_entity(entity_type, category, entity_name, unique_id, device_info, origin_info, topic, value_template, unit)
                 self.registered_entities.add(unique_id)
             
         except Exception as e:
             logger.error(f"Error processing GenMon message: {e}")
     
     def _register_ha_entity(self, entity_type: str, category: str, entity_name: str, 
-                           unique_id: str, device_info: Dict[str, Any], 
+                           unique_id: str, device_info: Dict[str, Any], origin_info: Dict[str, Any],
                            state_topic: str, value_template: str, unit: Optional[str] = None):
         """Register an entity with Home Assistant discovery"""
         # Base configuration for all entity types
@@ -253,6 +255,7 @@ class GenmonHADiscovery:
             "state_topic": state_topic,  # Use the original MQTT topic
             "value_template": value_template,
             "device": device_info,
+            "origin": origin_info,
             "object_id": f"{self.ha_device_id}"  # Group under device
         }
         
@@ -319,6 +322,7 @@ def main():
     parser.add_argument('--device-name', help='Device name')
     parser.add_argument('--device-manufacturer', help='Device manufacturer')
     parser.add_argument('--device-model', help='Device model')
+    parser.add_argument('--ha-origin', help='Home Assistant origin identifier')
     
     args = parser.parse_args()
     
@@ -346,6 +350,8 @@ def main():
         kwargs['ha_device_manufacturer'] = args.device_manufacturer
     if args.device_model is not None:
         kwargs['ha_device_model'] = args.device_model
+    if args.ha_origin is not None:
+        kwargs['ha_origin'] = args.ha_origin
     
     # Create discovery instance with only defined arguments
     discovery = GenmonHADiscovery(**kwargs)
