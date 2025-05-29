@@ -204,6 +204,7 @@ class GenmonHADiscovery:
             # Capitalize each word and replace spaces with underscores
             formatted_name = '_'.join(word.capitalize() for word in entity_name.replace('_', ' ').split())
             unique_id = f"{device_id}_{category.capitalize()}_{formatted_name}"
+            object_id = f"{category.capitalize()}_{formatted_name}"
 
             # Set device info from message if relevant
             if "Controller_Detected" in formatted_name:
@@ -212,7 +213,7 @@ class GenmonHADiscovery:
             elif "Generator_Serial_Number" in formatted_name:
                 self.ha_serial_number = payload
                 return
-            elif "Generator_Monitor_Version" in formatted_name:
+            elif "Firmware_Version" in formatted_name:
                 self.ha_sw_version = payload
             
             # Set up device info (same for all entities)
@@ -238,14 +239,14 @@ class GenmonHADiscovery:
             # Register entity if not already registered
             if unique_id not in self.registered_entities:
                 # Create a discovery config for this entity
-                self._register_ha_entity(entity_type, category, entity_name, unique_id, device_info, origin_info, topic, value_template, unit)
+                self._register_ha_entity(entity_type, category, entity_name, unique_id, object_id, device_info, origin_info, topic, value_template, unit)
                 self.registered_entities.add(unique_id)
             
         except Exception as e:
             logger.error(f"Error processing GenMon message: {e}")
     
     def _register_ha_entity(self, entity_type: str, category: str, entity_name: str, 
-                           unique_id: str, device_info: Dict[str, Any], origin_info: Dict[str, Any],
+                           unique_id: str, object_id: str, device_info: Dict[str, Any], origin_info: Dict[str, Any],
                            state_topic: str, value_template: str, unit: Optional[str] = None):
         """Register an entity with Home Assistant discovery"""
         # Base configuration for all entity types
@@ -256,7 +257,7 @@ class GenmonHADiscovery:
             "value_template": value_template,
             "device": device_info,
             "origin": origin_info,
-            "object_id": f"{self.ha_device_id}"  # Group under device
+            "object_id": object_id 
         }
         
         # Add entity-specific configuration
