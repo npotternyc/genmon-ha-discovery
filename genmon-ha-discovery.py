@@ -96,12 +96,8 @@ class GenmonHADiscovery:
         if rc == 0:
             logger.info("Connected to MQTT broker")
             # Subscribe to genmon topics
-            if self.mqtt_genmon_topic:
-                self.client.subscribe(self.mqtt_genmon_topic)
-                logger.info(f"Subscribed to {self.mqtt_genmon_topic}")
-            else:
-                self.client.subscribe("generator/#")
-                logger.info("Subscribed to generator/#")
+            self.client.subscribe(self.mqtt_genmon_topic)
+            logger.info(f"Subscribed to {self.mqtt_genmon_topic}")
         else:
             logger.error(f"Failed to connect to MQTT broker with code {rc}")
     
