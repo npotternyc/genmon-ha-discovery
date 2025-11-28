@@ -1,0 +1,27 @@
+# Example configuration file for genmon-ha-discovery
+# Copy this file to config.yaml and update with your settings
+# Run with: python3 genmon-ha-discovery.py --config config.yaml
+
+# MQTT broker settings
+mqtt:
+  host: <your mqtt server>
+  port: 1883
+  username: <your_username>
+  password: <your_password>
+  client_id: genmon-ha-discovery  # Optional
+
+# Home Assistant settings
+homeassistant:
+  discovery_prefix: homeassistant  # Optional, default is 'homeassistant'
+
+# Genmon settings
+genmon:
+  topic: generator/#  # Optional, default is 'generator/#'
+
+# Device information
+device:
+  id: Genmon_Generator  # Optional, default is 'Genmon_Generator'
+  name: Generator  # Optional, default is 'Generator'
+  manufacturer: GenMon  # Optional, default is 'GenMon'
+  model: Generator Monitor  # Optional, default is 'Generator Monitor'
+  origin: Generator Monitor  # Optional, default is 'Generator Monitor'

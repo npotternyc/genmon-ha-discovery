@@ -5,6 +5,8 @@ import paho.mqtt.client as mqtt
 import argparse
 import logging
 import re
+import yaml
+import os
 from typing import Dict, Any, Optional, Tuple
 
 # Configure logging
@@ -306,7 +308,7 @@ class GenmonHADiscovery:
         commands = [
             ("Start Generator", "generator: start"),
             ("Stop Generator", "generator: stop"),
-            ("Start Transfer Switch", "generator: starttransfer")
+            ("Start and Transfer Switch", "generator: starttransfer")
         ]
 
         device_info = {
@@ -353,32 +355,104 @@ class GenmonHADiscovery:
             logger.info("Shutting down...")
             self.stop()
 
+def load_config_from_yaml(config_path: str) -> Dict[str, Any]:
+    """Load configuration from a YAML file"""
+    if not os.path.exists(config_path):
+        logger.error(f"Config file not found: {config_path}")
+        return {}
+
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            if config is None:
+                return {}
+
+            # Map YAML keys to GenmonHADiscovery parameter names
+            kwargs = {}
+
+            # MQTT settings
+            if 'mqtt' in config:
+                mqtt_config = config['mqtt']
+                if 'host' in mqtt_config:
+                    kwargs['mqtt_host'] = mqtt_config['host']
+                if 'port' in mqtt_config:
+                    kwargs['mqtt_port'] = mqtt_config['port']
+                if 'username' in mqtt_config:
+                    kwargs['mqtt_username'] = mqtt_config['username']
+                if 'password' in mqtt_config:
+                    kwargs['mqtt_password'] = mqtt_config['password']
+                if 'client_id' in mqtt_config:
+                    kwargs['mqtt_client_id'] = mqtt_config['client_id']
+
+            # Home Assistant settings
+            if 'homeassistant' in config:
+                ha_config = config['homeassistant']
+                if 'discovery_prefix' in ha_config:
+                    kwargs['mqtt_discovery_prefix'] = ha_config['discovery_prefix']
+
+            # Genmon settings
+            if 'genmon' in config:
+                genmon_config = config['genmon']
+                if 'topic' in genmon_config:
+                    kwargs['mqtt_genmon_topic'] = genmon_config['topic']
+
+            # Device settings
+            if 'device' in config:
+                device_config = config['device']
+                if 'id' in device_config:
+                    kwargs['ha_device_id'] = device_config['id']
+                if 'name' in device_config:
+                    kwargs['ha_device_name'] = device_config['name']
+                if 'manufacturer' in device_config:
+                    kwargs['ha_device_manufacturer'] = device_config['manufacturer']
+                if 'model' in device_config:
+                    kwargs['ha_device_model'] = device_config['model']
+                if 'origin' in device_config:
+                    kwargs['ha_origin'] = device_config['origin']
+
+            logger.info(f"Loaded configuration from {config_path}")
+            return kwargs
+
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing YAML config file: {e}")
+        return {}
+    except Exception as e:
+        logger.error(f"Error loading config file: {e}")
+        return {}
+
 def main():
     """Main entry point for the script"""
     parser = argparse.ArgumentParser(description='GenMon Home Assistant Discovery')
-    
+
+    # Config file argument (optional)
+    parser.add_argument('--config', '-c', help='Path to YAML configuration file (optional)')
+
     # MQTT connection arguments
     parser.add_argument('--mqtt-host', help='MQTT broker host')
     parser.add_argument('--mqtt-port', type=int, help='MQTT broker port')
     parser.add_argument('--mqtt-username', help='MQTT username')
     parser.add_argument('--mqtt-password', help='MQTT password')
     parser.add_argument('--mqtt-client-id', help='MQTT client ID')
-    
+
     # Home Assistant arguments
     parser.add_argument('--discovery-prefix', help='Home Assistant discovery prefix')
     parser.add_argument('--genmon-topic', help='GenMon MQTT topic to subscribe to')
-    
+
     # Device info arguments
     parser.add_argument('--device-id', help='Device ID')
     parser.add_argument('--device-name', help='Device name')
     parser.add_argument('--device-manufacturer', help='Device manufacturer')
     parser.add_argument('--device-model', help='Device model')
     parser.add_argument('--ha-origin', help='Home Assistant origin identifier')
-    
+
     args = parser.parse_args()
-    
-    # Create kwargs dictionary with only defined arguments
+
+    # Start with empty config, then load from YAML if provided
     kwargs = {}
+    if args.config:
+        kwargs = load_config_from_yaml(args.config)
+
+    # Override with command line arguments (command line takes precedence)
     if args.mqtt_host is not None:
         kwargs['mqtt_host'] = args.mqtt_host
     if args.mqtt_port is not None:
