@@ -5,8 +5,7 @@ import paho.mqtt.client as mqtt
 import argparse
 import logging
 import re
-import datetime
-from typing import Dict, Any, Optional, Tuple, Union
+from typing import Dict, Any, Optional, Tuple
 
 # Configure logging
 logging.basicConfig(
@@ -52,7 +51,7 @@ class GenmonHADiscovery:
         self.ha_origin_support_url = "https://github.com/jgyates/genmon"
 
         # MQTT client setup
-        self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+        self.client = mqtt.Client()
         if mqtt_client_id:
             self.client._client_id = mqtt_client_id.encode()
         if mqtt_username and mqtt_password:
@@ -91,17 +90,18 @@ class GenmonHADiscovery:
         self.client.loop_stop()
         self.client.disconnect()
     
-    def on_connect(self, client, userdata, flags, rc, properties=None):
+    def on_connect(self, _client, _userdata, _flags, rc, properties=None):
         """Callback when the client connects to the MQTT broker"""
         if rc == 0:
             logger.info("Connected to MQTT broker")
             # Subscribe to genmon topics
-            self.client.subscribe(self.mqtt_genmon_topic)
-            logger.info(f"Subscribed to {self.mqtt_genmon_topic}")
+            topic = self.mqtt_genmon_topic if self.mqtt_genmon_topic else "generator/#"
+            self.client.subscribe(topic)
+            logger.info(f"Subscribed to {topic}")
         else:
             logger.error(f"Failed to connect to MQTT broker with code {rc}")
     
-    def on_message(self, client, userdata, msg):
+    def on_message(self, _client, _userdata, msg):
         """Callback when a message is received from the MQTT broker"""
         try:
             topic = msg.topic
@@ -222,12 +222,12 @@ class GenmonHADiscovery:
                 "sw_version": self.ha_sw_version
             }
 
-            #Set up origin info (same for all entities)
+            # Set up origin info (same for all entities)
             origin_info = {
                 "name": self.ha_origin,
                 "sw_version": self.ha_origin_version,
                 "support_url": self.ha_origin_support_url
-            } 
+            }
             
             # Get value template and unit based on payload format
             value_template, unit = self._get_value_template_and_unit(payload)
