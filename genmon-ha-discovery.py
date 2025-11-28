@@ -51,7 +51,7 @@ class GenmonHADiscovery:
         self.ha_origin_support_url = "https://github.com/jgyates/genmon"
 
         # MQTT client setup
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         if mqtt_client_id:
             self.client._client_id = mqtt_client_id.encode()
         if mqtt_username and mqtt_password:
@@ -98,6 +98,9 @@ class GenmonHADiscovery:
             topic = self.mqtt_genmon_topic if self.mqtt_genmon_topic else "generator/#"
             self.client.subscribe(topic)
             logger.info(f"Subscribed to {topic}")
+
+            # Register command buttons
+            self._register_command_buttons()
         else:
             logger.error(f"Failed to connect to MQTT broker with code {rc}")
     
@@ -106,9 +109,9 @@ class GenmonHADiscovery:
         try:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
-            
+
             logger.debug(f"Received message on topic {topic}: {payload}")
-            
+
             # Get topic prefix from the subscription topic
             # Default to 'generator' if mqtt_genmon_topic is None
             topic_prefix = "generator"
@@ -116,11 +119,11 @@ class GenmonHADiscovery:
                 topic_parts = self.mqtt_genmon_topic.split('/')
                 if topic_parts:
                     topic_prefix = topic_parts[0]
-            
+
             # Process message from GenMon
             if topic.startswith(f"{topic_prefix}/"):
                 self._process_genmon_message(topic, payload)
-                
+
         except Exception as e:
             logger.error(f"Error processing message: {e}")
     
@@ -240,7 +243,7 @@ class GenmonHADiscovery:
             
         except Exception as e:
             logger.error(f"Error processing GenMon message: {e}")
-    
+
     def _register_ha_entity(self, entity_type: str, category: str, entity_name: str, 
                            unique_id: str, object_id: str, device_info: Dict[str, Any], origin_info: Dict[str, Any],
                            state_topic: str, value_template: str, unit: Optional[str] = None):
@@ -288,7 +291,58 @@ class GenmonHADiscovery:
         discovery_topic = f"{self.mqtt_discovery_prefix}/{entity_type}/{self.ha_device_id}/{unique_id}/config"
         self.client.publish(discovery_topic, json.dumps(config), retain=True)
         logger.info(f"Registered {entity_type}: {unique_id}")
-    
+
+    def _register_command_buttons(self):
+        """Register button entities for controlling the generator"""
+        # Get topic prefix from the subscription topic
+        topic_prefix = "generator"
+        if self.mqtt_genmon_topic:
+            topic_parts = self.mqtt_genmon_topic.split('/')
+            if topic_parts:
+                topic_prefix = topic_parts[0]
+
+        # Map button names to Genmon commands
+        # Genmon remote commands: https://github.com/jgyates/genmon/wiki/1.-Software-Overview#remote-commands
+        commands = [
+            ("Start Generator", "generator: start"),
+            ("Stop Generator", "generator: stop"),
+            ("Start Transfer Switch", "generator: starttransfer")
+        ]
+
+        device_info = {
+            "identifiers": [self.ha_device_id],
+            "name": self.ha_device_name,
+            "manufacturer": self.ha_device_manufacturer,
+            "model": self.ha_device_model,
+            "serial_number": self.ha_serial_number,
+            "sw_version": self.ha_sw_version
+        }
+
+        origin_info = {
+            "name": self.ha_origin,
+            "sw_version": self.ha_origin_version,
+            "support_url": self.ha_origin_support_url
+        }
+
+        for command_name, genmon_command in commands:
+            # Create unique_id from command name
+            command_id = command_name.lower().replace(' ', '_')
+            unique_id = f"{self.ha_device_id}_command_{command_id}"
+
+            config = {
+                "name": command_name,
+                "unique_id": unique_id,
+                "command_topic": f"{topic_prefix}/command",
+                "payload_press": genmon_command,
+                "device": device_info,
+                "origin": origin_info,
+                "object_id": f"Command_{command_name.replace(' ', '_')}"
+            }
+
+            discovery_topic = f"{self.mqtt_discovery_prefix}/button/{self.ha_device_id}/{unique_id}/config"
+            self.client.publish(discovery_topic, json.dumps(config), retain=True)
+            logger.info(f"Registered command button: {command_name} -> {genmon_command}")
+
     def _main_loop(self):
         """Main processing loop"""
         try:
