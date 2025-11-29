@@ -212,7 +212,10 @@ class GenmonHADiscovery:
             # Sanitize for MQTT topics: remove parentheses and other invalid chars
             formatted_name = formatted_name.replace('(', '').replace(')', '').replace('[', '').replace(']', '')
             unique_id = f"{device_id}_{category.capitalize()}_{formatted_name}"
-            object_id = f"{category.capitalize()}_{formatted_name}"
+            # Prefix entity ID with device name
+            device_name = self.ha_device_name if self.ha_device_name else "Generator"
+            device_name_prefix = device_name.replace(' ', '_')
+            object_id = f"{device_name_prefix}_{category.capitalize()}_{formatted_name}"
 
             # Set device info from message if relevant
             if "Controller_Detected" in formatted_name:
@@ -346,7 +349,10 @@ class GenmonHADiscovery:
             # Create unique_id from command name
             command_id = command_name.lower().replace(' ', '_')
             unique_id = f"{self.ha_device_id}_command_{command_id}"
-            entity_id = f"Command_{command_name.replace(' ', '_')}"
+            # Prefix entity ID with device name
+            device_name = self.ha_device_name if self.ha_device_name else "Generator"
+            device_name_prefix = device_name.replace(' ', '_')
+            entity_id = f"{device_name_prefix}_Command_{command_name.replace(' ', '_')}"
 
             config = {
                 "name": command_name,
