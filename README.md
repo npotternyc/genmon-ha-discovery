@@ -18,8 +18,8 @@ Python script that provides MQTT discovery for Genmon generator monitors in Home
 - MQTT broker (e.g., Home Assistant Mosquitto broker add-on)
 - Genmon with MQTT enabled using MQTT broker
 - Home Assistant with MQTT integration using MQTT broker
-**Note**: External MQTT broker should work, but it has only been tested with add-on
 
+**Note**: External MQTT broker should work, but it has only been tested with add-on
 
 ## Configuration
 

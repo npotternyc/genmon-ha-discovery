@@ -173,9 +173,10 @@ class GenmonHADiscovery:
             return "{{ value | regex_findall('" + pattern + "') | first }}", unit
         
         # For key-value format (e.g., "Battery Check Due: 12/29/2025")
-        if ":" in payload:
-            return "{{ value.split(': ')[1] }}", None
-        
+        if ": " in payload:
+            # Use safe template that handles cases where split doesn't produce multiple elements
+            return "{{ value.split(': ')[1] if ': ' in value and value.split(': ') | length > 1 else value }}", None
+
         # Default template (no transformation)
         return "{{ value }}", None
     
@@ -194,8 +195,11 @@ class GenmonHADiscovery:
             
             # Determine entity type (sensor, binary_sensor, etc.)
             entity_type = "sensor"  # Default
-            
-            if entity_name in ['state', 'switch_state']:
+
+            # Check for binary values (Yes/No, Online/Offline, etc.)
+            if payload.strip() in ['Yes', 'No', 'Online', 'Offline', 'True', 'False', 'ON', 'OFF']:
+                entity_type = "binary_sensor"
+            elif entity_name in ['state', 'switch_state']:
                 entity_type = "binary_sensor"
             elif entity_name in ['command']:
                 entity_type = "switch"
@@ -203,7 +207,10 @@ class GenmonHADiscovery:
             # Create unique ID and topic ID for this entity
             device_id = self.ha_device_id if self.ha_device_id else "genmon_generator"
             # Capitalize each word and replace spaces with underscores
+            # Remove invalid MQTT topic characters: parentheses, etc.
             formatted_name = '_'.join(word.capitalize() for word in entity_name.replace('_', ' ').split())
+            # Sanitize for MQTT topics: remove parentheses and other invalid chars
+            formatted_name = formatted_name.replace('(', '').replace(')', '').replace('[', '').replace(']', '')
             unique_id = f"{device_id}_{category.capitalize()}_{formatted_name}"
             object_id = f"{category.capitalize()}_{formatted_name}"
 
@@ -246,7 +253,7 @@ class GenmonHADiscovery:
         except Exception as e:
             logger.error(f"Error processing GenMon message: {e}")
 
-    def _register_ha_entity(self, entity_type: str, category: str, entity_name: str, 
+    def _register_ha_entity(self, entity_type: str, category: str, entity_name: str,
                            unique_id: str, object_id: str, device_info: Dict[str, Any], origin_info: Dict[str, Any],
                            state_topic: str, value_template: str, unit: Optional[str] = None):
         """Register an entity with Home Assistant discovery"""
@@ -258,11 +265,13 @@ class GenmonHADiscovery:
             "value_template": value_template,
             "device": device_info,
             "origin": origin_info,
-            "object_id": object_id 
+            "default_entity_id": f"{entity_type}.{object_id}"
         }
         
         # Add entity-specific configuration
         if entity_type == "binary_sensor":
+            # Use value_template to handle various binary formats (Yes/No, ON/OFF, Online/Offline, etc.)
+            config["value_template"] = "{{ 'ON' if value in ['Yes', 'ON', 'Online', 'True', 'true', '1'] else 'OFF' }}"
             config.update({
                 "payload_on": "ON",
                 "payload_off": "OFF"
@@ -274,17 +283,24 @@ class GenmonHADiscovery:
                 "payload_off": "OFF"
             })
         elif entity_type == "sensor":
-            # For sensors, add device class based on content
+            # For sensors, add device class based on content and unit
             if any(x in entity_name.lower() for x in ["due", "next", "date"]):
                 config.update({
                     "device_class": "date"
                 })
-            elif any(x in entity_name.lower() for x in ["runtime", "hours", "run_hours"]):
+            elif unit == "kWh":
+                # Energy sensors (kW Hours) - check unit first to avoid confusion with "hours" in name
+                config.update({
+                    "device_class": "energy",
+                    "state_class": "total_increasing"
+                })
+            elif unit == "h" or (any(x in entity_name.lower() for x in ["runtime", "run_hours", "run hours", "total_run_hours"]) and unit is None):
+                # Duration sensors (hours) - check for unit 'h' or specific patterns with no unit
                 config.update({
                     "device_class": "duration",
                     "state_class": "total_increasing"
                 })
-            
+
             # Add unit of measurement if available
             if unit:
                 config["unit_of_measurement"] = unit
@@ -304,11 +320,11 @@ class GenmonHADiscovery:
                 topic_prefix = topic_parts[0]
 
         # Map button names to Genmon commands
-        # Genmon remote commands: https://github.com/jgyates/genmon/wiki/1.-Software-Overview#remote-commands
+        # Genmon remote commands: https://github.com/jgyates/genmon/wiki/1----Software-Overview#genmqttpy-optional
         commands = [
-            ("Start Generator", "generator: start"),
-            ("Stop Generator", "generator: stop"),
-            ("Start and Transfer Switch", "generator: starttransfer")
+            ("Start Generator", "setremote=start"),
+            ("Stop Generator", "setremote=stop"),
+            ("Start and Transfer Switch", "setremote=starttransfer")
         ]
 
         device_info = {
@@ -330,6 +346,7 @@ class GenmonHADiscovery:
             # Create unique_id from command name
             command_id = command_name.lower().replace(' ', '_')
             unique_id = f"{self.ha_device_id}_command_{command_id}"
+            entity_id = f"Command_{command_name.replace(' ', '_')}"
 
             config = {
                 "name": command_name,
@@ -338,7 +355,7 @@ class GenmonHADiscovery:
                 "payload_press": genmon_command,
                 "device": device_info,
                 "origin": origin_info,
-                "object_id": f"Command_{command_name.replace(' ', '_')}"
+                "default_entity_id": f"button.{entity_id}"
             }
 
             discovery_topic = f"{self.mqtt_discovery_prefix}/button/{self.ha_device_id}/{unique_id}/config"
