@@ -53,7 +53,7 @@ class GenmonHADiscovery:
         self.ha_origin_support_url = "https://github.com/jgyates/genmon"
 
         # MQTT client setup
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2) # type: ignore
         if mqtt_client_id:
             self.client._client_id = mqtt_client_id.encode()
         if mqtt_username and mqtt_password:
